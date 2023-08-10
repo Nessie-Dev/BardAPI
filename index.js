@@ -6,12 +6,6 @@ import fetch from 'node-fetch';
 const app = express();
 const port = 3000;
 
-// Initialize Bard instance
-const bard = new Bard({
-  "__Secure-1PSID": "Zgiv2NoHHyYYyDhLImkY7QmwASbp6k72CiZIMaM2Tc9kJ3PZJkOywx2pKWDCB4Ty-bSMww.",
-  "__Secure-1PSIDTS": "sidts-CjIBSAxbGeL1pTAqkIOcl_ito3FU5oN8ZsNv0LW00zc-W_Vq6lvob_EJ-gzmawP0d2UhqxAA"
-});
-
 function cleanContentAndExtractImages(output) {
   const imageRegex = /\[Image of .+?\]\(.*?\)/g;
 
@@ -36,6 +30,11 @@ function cleanContentAndExtractImages(output) {
   }
 }
 
+// Initialize Bard instance
+const bard = new Bard({
+  "__Secure-1PSID": "Zgiv2N92706_yTb-dIIm5DwrnKyuyThHZz4EAhowqnXNnyHS-S6VJwXh63lWz97UPvTHGA.",
+  "__Secure-1PSIDTS": "sidts-CjEBSAxbGfe63ipTpC0Uj3daPb9gHSaMSG7zDhi--6EkwheHhJlhxDO9OD86d2AyDGszEAA"
+});
 
 // Initialize SQLite database
 const db = new sqlite3.Database('chats.db', err => {
@@ -46,8 +45,13 @@ const db = new sqlite3.Database('chats.db', err => {
   }
 });
 
-// Create chats table if not exists
-db.run(`CREATE TABLE IF NOT EXISTS chats (uid TEXT, chatIDs JSON)`);
+// Create a new table to store chat data
+db.run(`
+  CREATE TABLE IF NOT EXISTS chats (
+    uid TEXT PRIMARY KEY,
+    chat_export TEXT
+  )
+`);
 
 // Endpoint to interact with Bard using GET
 app.get('/chat', async (req, res) => {
@@ -68,58 +72,35 @@ app.get('/chat', async (req, res) => {
       const modifiedContent = cleanContentAndExtractImages(response);
       res.json({ data: modifiedContent });
     } else {
-      // Check if UID exists in the database
-      const query = `SELECT chatIDs FROM chats WHERE uid = ?`;
-      db.get(query, [uid], async (err, row) => {
+      // Check if chat exists in the database for the given UID
+      db.get('SELECT chat_export FROM chats WHERE uid = ?', [uid], async (err, row) => {
         if (err) {
-          console.error('Error retrieving chatIDs from database:', err.message);
+          console.error('Database error:', err.message);
           res.status(500).json({ error: 'An internal server error occurred.' });
           return;
         }
 
-        if (row && row.chatIDs) {
-          const chatIDs = row.chatIDs;
-          // Create a new chat
-          const continuedConversation = bard.createChat({
-    conversationID: chatIDs.conversationID,
-    responseID: chatIDs.responseID,
-    choiceID: chatIDs.choiceID,
-    _reqID: chatIDs._reqID
-});
-          // Perform the conversation
-          const response = await continuedConversation.ask(prompt, options);
-
-          // Update chatIDs in the database
-          const updatedChatIDs = await continuedConversation.export();
-          const updateQuery = `UPDATE chats SET chatIDs = ? WHERE uid = ?`;
-          db.run(updateQuery, [JSON.stringify(updatedChatIDs), uid], err => {
-            if (err) {
-              console.error('Error updating chatIDs in database:', err.message);
-            } else {
-              console.log(`ChatIDs updated in the database for ${uid}.`);
-            }
-          });
-
+        if (row) {
+          // Use existing chat export object to continue the conversation
+          const existingChat = bard.createChat(JSON.parse(row.chat_export));
+          const response = await existingChat.ask(prompt, options);
           const modifiedContent = cleanContentAndExtractImages(response);
-          console.log(updatedChatIDs)
           res.json({ data: modifiedContent });
         } else {
           // Create a new chat for a new user
-          const myConversation = bard.createChat();
-          const response = await myConversation.ask(prompt, options);
+          const newChat = bard.createChat();
+          const response = await newChat.ask(prompt, options);
+          const chatExport = JSON.stringify(await newChat.export());
 
-          // Store chatIDs in the database
-          const chatIDs = await myConversation.export();
-          const insertQuery = `INSERT INTO chats (uid, chatIDs) VALUES (?, ?)`;
-          db.run(insertQuery, [uid, JSON.stringify(chatIDs)], err => {
+          // Store chat export object in the database
+          db.run('INSERT INTO chats (uid, chat_export) VALUES (?, ?)', [uid, chatExport], err => {
             if (err) {
-              console.error('Error inserting chatIDs into database:', err.message);
+              console.error('Database error:', err.message);
               res.status(500).json({ error: 'An internal server error occurred.' });
-            } else {
-              console.log(`ChatIDs inserted into the database for ${uid}.`);
-              const modifiedContent = cleanContentAndExtractImages(response);
-              res.json({ data: modifiedContent });
+              return;
             }
+            const modifiedContent = cleanContentAndExtractImages(response);
+            res.json({ data: modifiedContent });
           });
         }
       });
