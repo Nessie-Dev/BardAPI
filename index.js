@@ -105,6 +105,18 @@ app.post('/update', async (req, res) => {
   }
 });
 
+app.get('/bard', async (req, res) => {
+try {
+bard = new Bard(await readCookies());
+ console.log('Cookies updated successfully.');
+    res.status(200).json({ message: 'Cookies updated successfully.' });
+  } catch (error) {
+    
+    res.status(500).json({ error: 'Internal Server Error', message: 'An error occurred while updating cookies.' });
+  }
+
+});
+
 app.get('/chat', async (req, res) => {
   if (bard == undefined) {
   bard = new Bard(await readCookies());
