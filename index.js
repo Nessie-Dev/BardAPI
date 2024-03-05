@@ -1,6 +1,6 @@
 import express from 'express';
 import sqlite3 from 'sqlite3';
-import Bard from 'bard-ai';
+import Bard from './bard.js';
 import fetch from 'node-fetch';
 import fs from 'fs';
 
@@ -27,9 +27,7 @@ async function readCookies() {
 
 async function updateCookies(cookiesObject) {
   try {
-    const existingCookies = readCookies();
-    const updatedCookies = { ...existingCookies, ...cookiesObject };
-    fs.writeFileSync('cookies.json', JSON.stringify(updatedCookies, null, 2), 'utf8');
+    fs.writeFileSync('cookies.json', JSON.stringify(cookiesObject, null, 2), 'utf8');
     console.log('Cookies updated successfully');
   } catch (error) {
     console.error('Error updating cookies:', error);
@@ -38,16 +36,9 @@ async function updateCookies(cookiesObject) {
 
 
 function cleanContentAndExtractImages(output) {
-  const imageRegex = /\[Image of .+?\]\(.*?\)/g;
+    const content = output.content;
 
-  const content = output.content.replace(imageRegex, '');
-
-  const images = output.images.filter(image => image.tag && image.url && image.info)
-    .map(image => ({
-      tag: image.tag,
-      url: image.url,
-      info: image.info
-    }));
+  const images = output.images;
 
   if (images.length > 0) {
     return {
@@ -84,18 +75,13 @@ app.post('/update', async (req, res) => {
   const data = req.body;
 
   try {
-    if (!data || !data["__Secure-1PSID"] || !data["__Secure-1PAPISID"] || !data["__Secure-1PSIDCC"] || !data["__Secure-1PSIDTS"]) {
+    if (!data) {
       
       return res.status(400).json({ error: 'Bad Request', message: 'Required cookies are missing.' });
     }
 
     
-    await updateCookies({
-      "__Secure-1PSID": data["__Secure-1PSID"],
-      "__Secure-1PAPISID": data["__Secure-1PAPISID"],
-      "__Secure-1PSIDCC": data["__Secure-1PSIDCC"],
-      "__Secure-1PSIDTS": data["__Secure-1PSIDTS"],
-    });
+    await updateCookies(data);
 
     console.log('Cookies updated successfully.');
     res.status(200).json({ message: 'Cookies updated successfully.' });
