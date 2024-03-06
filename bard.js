@@ -48,7 +48,6 @@ class Bard {
           Referer: this.#bardURL,
           Cookie: Array.isArray(cookie) ? cookie.map(cookie => `${cookie.name}=${cookie.value}`).join('; ') : "__Secure-1PSID=" + cookie,
           };
-    console.log(this.#headers);
       let responseText;
       // Attempt to retrieve SNlM0e
       try {
@@ -227,7 +226,7 @@ class Bard {
 
       this.#verbose && console.log("ðŸ’­ Sending message to Bard");
       // Send the fetch request
-      const chatData = await this.#fetch(url.toString(), {
+      const aData = await this.#fetch(url.toString(), {
           method: "POST",
           headers: this.#headers,
           body: formBody,
@@ -237,10 +236,14 @@ class Bard {
               return response.text();
           })
           .then((text) => {
-              return JSON.parse(text.split("\n")[3]);
+              return text;
           });
 
       this.#verbose && console.log("ðŸ§© Parsing output");
+      const chatData = await JSON.parse(aData.split("\n")[3]);
+    const textData = JSON.parse(aData.split("\n")[3])[0][2];
+    const rawData = JSON.parse(textData);
+    const answer = rawData[4][0];
       // Get first Bard-recommended answer
       const regex_responses = /\["([^"]+)"\]/g;
       const responses = [];
@@ -255,7 +258,7 @@ class Bard {
       }
 
       // Text of that answer
-      const text = responses[0];
+      const text = answer[1][0];
 
 
       // Get data about images in that answer
@@ -277,8 +280,7 @@ class Bard {
       for (let i = 0; i < img.length; i++) {
           const url = img[i];
           if (url.startsWith('https://lh3.googleusercontent')) {
-              const d = await this.#getImageUrl(url);
-              images.push(d);
+              images.push(url);
           } else if (url.startsWith('https://encrypted-tbn1.gstatic.com/images?')) {
               // Replace \\u003d with =
               const modifiedUrl = url.replace(/\\u003d/g, '=');
